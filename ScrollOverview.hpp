@@ -34,19 +34,20 @@ class CScrollOverview : public IOverview {
     void close(bool switchToSelection = true) override;
     void selectHoveredWorkspace() override;
 
-    void onKbMoveFocus(const std::string& dir) override {}
-    void onKbConfirm() override {}
-    void onKbSelectNumber(int num) override {}
-    void onKbSelectToken(int visibleIdx) override {}
-    bool selectVisibleToken(const std::string& token) override { return false; }
-    int64_t selectedWorkspaceID() const override { return startedOn ? startedOn->m_id : -1; }
-    bool selectWorkspaceByID(int64_t workspaceID) override { return false; }
-    bool selectVisibleIndex(size_t index) override { return false; }
+    void onKbMoveFocus(const std::string& dir) override;
+    void onKbConfirm() override;
+    void onKbSelectNumber(int num) override;
+    void onKbSelectToken(int visibleIdx) override;
+    bool selectVisibleToken(const std::string& token) override;
+    int64_t selectedWorkspaceID() const override;
+    bool selectWorkspaceByID(int64_t workspaceID) override;
+    bool selectVisibleIndex(size_t index) override;
     bool moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targetIndex, const PHLWINDOW& window = nullptr) override { return false; }
 
     void fullRender() override;
 
   private:
+    PHLWINDOW getFocusedOrFirstWindow();
     void   redrawWorkspace(PHLWORKSPACE w, bool forcelowres = false);
     void   redrawAll(bool forcelowres = false);
     void   onWorkspaceChange();

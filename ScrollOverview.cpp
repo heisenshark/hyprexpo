@@ -1,4 +1,5 @@
 #include "ScrollOverview.hpp"
+#include "HyprexpoLogic.hpp"
 #include <any>
 #include <vector>
 #include <unordered_map>
@@ -6,6 +7,8 @@
 #include <string>
 #include <algorithm>
 #include <memory>
+#include <limits>
+#include <cmath>
 #include <GLES3/gl32.h>
 
 #include "HyprlandConfigCompat.hpp"
@@ -461,11 +464,10 @@ void CScrollOverview::fullRender() {
             Render::GL::g_pHyprOpenGL->renderTextureInternal(img->fb->getTexture(), texbox, Render::GL::CHyprOpenGLImpl::STextureRenderData{.damage = &damage, .a = 1.0f * img->pWindow->m_alpha.value()});
 
             if (img->highlight) {
-                CBox texbox2 = CBox{img->pWindow->m_realPosition->value(), img->pWindow->m_realSize->value()}
-                                   .translate(-VIEWPORT_CENTER)
-                                   .scale(scale->value())
-                                   .translate(VIEWPORT_CENTER)
-                                   .translate({0.F, yoff});
+                CBox texbox2 = CBox{img->pWindow->m_realPosition->value() - pMonitor->m_position, img->pWindow->m_realSize->value()};
+                texbox2.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
+                texbox2.translate({0.F, yoff});
+                texbox2.scale(pMonitor->m_scale).round();
                 Render::GL::g_pHyprOpenGL->renderRect(texbox2, CHyprColor{0.5, 0.0, 0.0, 0.5}, Render::GL::CHyprOpenGLImpl::SRectRenderData{.round = 5});
             }
         }
@@ -479,6 +481,29 @@ void CScrollOverview::fullRender() {
 
         if (dirty)
             std::erase_if(wimg->windowImages, [](const auto& e) { return !e->pWindow; });
+    }
+
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        size_t winWsIdx = 0;
+        bool foundWin = false;
+        for (size_t i = 0; i < images.size(); ++i) {
+            if (images[i]->pWorkspace == win->m_workspace) {
+                winWsIdx = i;
+                foundWin = true;
+                break;
+            }
+        }
+        if (foundWin) {
+            float yoff = (sc<float>(winWsIdx) - sc<float>(activeIdx)) * pMonitor->m_size.y * scale->value();
+            CBox texbox = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()};
+            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
+            texbox.translate({0.F, yoff});
+            texbox.scale(pMonitor->m_scale).round();
+
+            const int roundPx = std::min(std::max(0, (int)std::lround(5.0 * pMonitor->m_scale)), (int)std::min(texbox.w, texbox.h) / 2);
+            Render::GL::g_pHyprOpenGL->renderRect(texbox, CHyprColor{0.2f, 0.6f, 1.0f, 0.45f}, Render::GL::CHyprOpenGLImpl::SRectRenderData{.round = roundPx});
+        }
     }
 }
 
@@ -527,4 +552,306 @@ void CScrollOverview::onSwipeEnd() {
 
     (*scale)    = **PDEFAULTZOOM;
     m_isSwiping = false;
+}
+
+PHLWINDOW CScrollOverview::getFocusedOrFirstWindow() {
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock()))
+        return closeOnWindow.lock();
+
+    const auto focused = Desktop::focusState()->window();
+    if (focused && Desktop::View::validMapped(focused)) {
+        for (const auto& wimg : images) {
+            for (const auto& img : wimg->windowImages) {
+                if (img->pWindow && img->pWindow.lock() == focused) {
+                    closeOnWindow = focused;
+                    return focused;
+                }
+            }
+        }
+    }
+
+    for (const auto& wimg : images) {
+        for (const auto& img : wimg->windowImages) {
+            if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
+                closeOnWindow = img->pWindow;
+                return img->pWindow.lock();
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+int64_t CScrollOverview::selectedWorkspaceID() const {
+    if (closeOnWindow && closeOnWindow->m_workspace)
+        return closeOnWindow->m_workspace->m_id;
+
+    if (viewportCurrentWorkspace < images.size() && images[viewportCurrentWorkspace]->pWorkspace)
+        return images[viewportCurrentWorkspace]->pWorkspace->m_id;
+
+    return startedOn ? startedOn->m_id : WORKSPACE_INVALID;
+}
+
+bool CScrollOverview::selectVisibleIndex(size_t index) {
+    if (index >= images.size() || !images[index]->pWorkspace)
+        return false;
+
+    viewportCurrentWorkspace = index;
+    size_t activeIdx = 0;
+    for (size_t i = 0; i < images.size(); ++i) {
+        if (images[i]->pWorkspace && images[i]->pWorkspace == startedOn) {
+            activeIdx = i;
+            break;
+        }
+    }
+    *viewOffset = {viewOffset->value().x, (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y};
+
+    for (const auto& img : images[index]->windowImages) {
+        if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
+            closeOnWindow = img->pWindow;
+            break;
+        }
+    }
+    damage();
+    return true;
+}
+
+bool CScrollOverview::selectWorkspaceByID(int64_t workspaceID) {
+    for (size_t i = 0; i < images.size(); ++i) {
+        if (images[i]->pWorkspace && images[i]->pWorkspace->m_id == workspaceID)
+            return selectVisibleIndex(i);
+    }
+    return false;
+}
+
+void CScrollOverview::onKbConfirm() {
+    if (closing)
+        return;
+    (void)getFocusedOrFirstWindow();
+    close();
+}
+
+void CScrollOverview::onKbSelectNumber(int num) {
+    if (closing)
+        return;
+    if (num == 0)
+        num = 10;
+    if (selectVisibleIndex(num - 1))
+        close();
+}
+
+void CScrollOverview::onKbSelectToken(int visibleIdx) {
+    if (closing)
+        return;
+    if (selectVisibleIndex(visibleIdx))
+        close();
+}
+
+bool CScrollOverview::selectVisibleToken(const std::string& token) {
+    const int idx = Hyprexpo::fallbackTokenToVisibleIndex(token);
+    if (idx < 0)
+        return false;
+    return selectVisibleIndex(idx);
+}
+
+void CScrollOverview::onKbMoveFocus(const std::string& dir) {
+    if (closing)
+        return;
+
+    PHLWINDOW currentWin = getFocusedOrFirstWindow();
+    if (!currentWin)
+        return;
+
+    size_t currentWsIdx = 0;
+    bool foundCurrent = false;
+    for (size_t i = 0; i < images.size(); ++i) {
+        if (images[i]->pWorkspace == currentWin->m_workspace) {
+            currentWsIdx = i;
+            foundCurrent = true;
+            break;
+        }
+    }
+
+    if (!foundCurrent)
+        return;
+
+    size_t activeIdx = 0;
+    for (size_t i = 0; i < images.size(); ++i) {
+        if (images[i]->pWorkspace && images[i]->pWorkspace == startedOn) {
+            activeIdx = i;
+            break;
+        }
+    }
+
+    Vector2D currentLocalCenter = CBox{currentWin->m_realPosition->value() - pMonitor->m_position, currentWin->m_realSize->value()}.middle();
+
+    PHLWINDOW bestWin = nullptr;
+
+    if (dir == "down") {
+        double bestScore = std::numeric_limits<double>::max();
+        for (const auto& img : images[currentWsIdx]->windowImages) {
+            if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                continue;
+            PHLWINDOW win = img->pWindow.lock();
+            if (win == currentWin)
+                continue;
+
+            Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+            double dy = center.y - currentLocalCenter.y;
+            double dx = center.x - currentLocalCenter.x;
+            if (dy > 20.0) {
+                double score = dy + 1.5 * std::abs(dx);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestWin = win;
+                }
+            }
+        }
+
+        if (!bestWin) {
+            for (size_t i = currentWsIdx + 1; i < images.size(); ++i) {
+                double bestDx = std::numeric_limits<double>::max();
+                PHLWINDOW candWin = nullptr;
+                for (const auto& img : images[i]->windowImages) {
+                    if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                        continue;
+                    PHLWINDOW win = img->pWindow.lock();
+                    Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                    double dx = std::abs(center.x - currentLocalCenter.x);
+                    if (dx < bestDx) {
+                        bestDx = dx;
+                        candWin = win;
+                    }
+                }
+                if (candWin) {
+                    bestWin = candWin;
+                    break;
+                }
+            }
+        }
+    } else if (dir == "up") {
+        double bestScore = std::numeric_limits<double>::max();
+        for (const auto& img : images[currentWsIdx]->windowImages) {
+            if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                continue;
+            PHLWINDOW win = img->pWindow.lock();
+            if (win == currentWin)
+                continue;
+
+            Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+            double dy = currentLocalCenter.y - center.y;
+            double dx = center.x - currentLocalCenter.x;
+            if (dy > 20.0) {
+                double score = dy + 1.5 * std::abs(dx);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestWin = win;
+                }
+            }
+        }
+
+        if (!bestWin && currentWsIdx > 0) {
+            for (size_t i = currentWsIdx; i-- > 0;) {
+                double bestDx = std::numeric_limits<double>::max();
+                PHLWINDOW candWin = nullptr;
+                for (const auto& img : images[i]->windowImages) {
+                    if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                        continue;
+                    PHLWINDOW win = img->pWindow.lock();
+                    Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                    double dx = std::abs(center.x - currentLocalCenter.x);
+                    if (dx < bestDx) {
+                        bestDx = dx;
+                        candWin = win;
+                    }
+                }
+                if (candWin) {
+                    bestWin = candWin;
+                    break;
+                }
+            }
+        }
+    } else if (dir == "left") {
+        double bestScore = std::numeric_limits<double>::max();
+        for (const auto& img : images[currentWsIdx]->windowImages) {
+            if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                continue;
+            PHLWINDOW win = img->pWindow.lock();
+            if (win == currentWin)
+                continue;
+
+            Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+            double dx = currentLocalCenter.x - center.x;
+            double dy = center.y - currentLocalCenter.y;
+            if (dx > 20.0) {
+                double score = dx + 1.5 * std::abs(dy);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestWin = win;
+                }
+            }
+        }
+        if (!bestWin) {
+            double maxX = -1.0;
+            for (const auto& img : images[currentWsIdx]->windowImages) {
+                if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                    continue;
+                PHLWINDOW win = img->pWindow.lock();
+                if (win == currentWin)
+                    continue;
+                Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                if (center.x > maxX) {
+                    maxX = center.x;
+                    bestWin = win;
+                }
+            }
+        }
+    } else if (dir == "right") {
+        double bestScore = std::numeric_limits<double>::max();
+        for (const auto& img : images[currentWsIdx]->windowImages) {
+            if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                continue;
+            PHLWINDOW win = img->pWindow.lock();
+            if (win == currentWin)
+                continue;
+
+            Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+            double dx = center.x - currentLocalCenter.x;
+            double dy = center.y - currentLocalCenter.y;
+            if (dx > 20.0) {
+                double score = dx + 1.5 * std::abs(dy);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestWin = win;
+                }
+            }
+        }
+        if (!bestWin) {
+            double minX = std::numeric_limits<double>::max();
+            for (const auto& img : images[currentWsIdx]->windowImages) {
+                if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                    continue;
+                PHLWINDOW win = img->pWindow.lock();
+                if (win == currentWin)
+                    continue;
+                Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                if (center.x < minX) {
+                    minX = center.x;
+                    bestWin = win;
+                }
+            }
+        }
+    }
+
+    if (bestWin) {
+        closeOnWindow = bestWin;
+        for (size_t i = 0; i < images.size(); ++i) {
+            if (images[i]->pWorkspace == bestWin->m_workspace) {
+                viewportCurrentWorkspace = i;
+                *viewOffset = {viewOffset->value().x, (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y};
+                break;
+            }
+        }
+        damage();
+    }
 }

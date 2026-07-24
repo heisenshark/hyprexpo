@@ -79,6 +79,8 @@ int main() {
     expect(!scrollSource.empty(), "ScrollOverview.cpp can be read from repo root");
     expect(scrollSource.find("enterSubmapIfEnabled();") != std::string::npos, "ScrollOverview constructor enters submap if enabled");
     expect(scrollSource.find("resetSubmapIfNeeded();") != std::string::npos, "ScrollOverview close/destructor resets submap if needed");
+    expect(scrollSource.find("void CScrollOverview::onKbMoveFocus(const std::string& dir)") != std::string::npos, "ScrollOverview implements directional keyboard focus");
+    expect(scrollSource.find("void CScrollOverview::onKbConfirm()") != std::string::npos, "ScrollOverview implements keyboard confirm");
 
     const auto iOverviewSource = readFile("IOverview.hpp");
     expect(!iOverviewSource.empty(), "IOverview.hpp can be read from repo root");
