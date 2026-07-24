@@ -23,6 +23,8 @@
 #include <xkbcommon/xkbcommon.h>
 #include <algorithm>
 #include <charconv>
+
+#include "HyprlandConfigCompat.hpp"
 #include <cctype>
 #include <format>
 #include <sstream>
@@ -442,7 +444,7 @@ static SDispatchResult onExpoDispatcher(std::string arg) {
             if (!PMONITOR)
                 return {};
             renderingOverview = true;
-            static auto* const* PLAYOUT = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:layout")->getDataStaticPtr();
+            static auto* const* PLAYOUT = (Hyprlang::STRING const*)CompatHyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:layout")->getDataStaticPtr();
             bool isScrolling = false;
             if (PLAYOUT && *PLAYOUT)
                 isScrolling = std::string(*PLAYOUT) == "scrolling";
@@ -476,7 +478,7 @@ static SDispatchResult onExpoDispatcher(std::string arg) {
         return {};
 
     renderingOverview = true;
-    static auto* const* PLAYOUT = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:layout")->getDataStaticPtr();
+    static auto* const* PLAYOUT = (Hyprlang::STRING const*)CompatHyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:layout")->getDataStaticPtr();
     bool isScrolling = false;
     if (PLAYOUT && *PLAYOUT)
         isScrolling = std::string(*PLAYOUT) == "scrolling";

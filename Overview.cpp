@@ -47,6 +47,7 @@ using namespace std::chrono_literals;
 namespace CompatHyprlandAPI {
 static bool isStringConfig(const std::string& name) {
     static const std::map<std::string, bool> STRING_CONFIGS = {
+        {"plugin:hyprexpo:layout", true},
         {"plugin:hyprexpo:workspace_method", true},
         {"plugin:hyprexpo:border_color", true},
         {"plugin:hyprexpo:border_color_current", true},
@@ -75,11 +76,13 @@ static bool isStringConfig(const std::string& name) {
 static bool isFloatConfig(const std::string& name) {
     return name == "plugin:hyprexpo:tile_rounding_power" ||
            name == "plugin:hyprexpo:label_scale_hover" ||
-           name == "plugin:hyprexpo:label_scale_focus";
+           name == "plugin:hyprexpo:label_scale_focus" ||
+           name == "plugin:hyprexpo:scrolling:default_zoom";
 }
 
 static Config::STRING stringDefault(const std::string& name) {
     static const std::map<std::string, Config::STRING> DEFAULTS = {
+        {"plugin:hyprexpo:layout", "grid"},
         {"plugin:hyprexpo:workspace_method", HyprexpoConfig::WORKSPACE_METHOD_DEFAULT},
         {"plugin:hyprexpo:border_color", HyprexpoConfig::BORDER_COLOR_DEFAULT},
         {"plugin:hyprexpo:border_color_current", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT},
@@ -114,11 +117,14 @@ static Config::FLOAT floatDefault(const std::string& name) {
         return HyprexpoConfig::LABEL_SCALE_HOVER_DEFAULT;
     if (name == "plugin:hyprexpo:label_scale_focus")
         return HyprexpoConfig::LABEL_SCALE_FOCUS_DEFAULT;
+    if (name == "plugin:hyprexpo:scrolling:default_zoom")
+        return 0.3F;
     return 0.0F;
 }
 
 static Config::INTEGER intDefault(const std::string& name) {
     static const std::map<std::string, Config::INTEGER> DEFAULTS = {
+        {"plugin:hyprexpo:scrolling:scroll_moves_up_down", 1},
         {"plugin:hyprexpo:columns", HyprexpoConfig::COLUMNS_DEFAULT},
         {"plugin:hyprexpo:gaps_in", HyprexpoConfig::GAPS_IN_DEFAULT},
         {"plugin:hyprexpo:bg_col", HyprexpoConfig::BG_COL_DEFAULT},

@@ -2,6 +2,9 @@
 
 HyprExpo is a maintained Hyprland plugin for expose-style workspace overview with keyboard selection, drag-drop window movement, labels, configurable gaps and borders, multi-monitor placement, and Lua gestures.
 
+> [!WARNING]
+> **AI Disclaimer**: This repository has been edited and ported by AI (Gemini 3.1 Pro). As a result, it may break and do weird stuff! Use at your own risk.
+
 If you experience any bugs, you are encouraged to [open an issue](https://github.com/sandwichfarm/hyprexpo/issues/new). Information I can use to reproduce a bug is appreciated. 
 
 [Docs (markdown)](docs/index.md) - [Docs (website)](http://hyprexpo.lol/docs) - [Announcement Post](https://www.reddit.com/r/hyprland/comments/1o30dsg/hyprexpoplus_outer_gaps_keyboard_navigation_and/)
@@ -146,6 +149,30 @@ hl.config({
     },
 })
 ```
+
+### Scroll Overview
+
+If you prefer a scrollable overview layout instead of a grid, you can enable the `scrolling` layout:
+
+```lua
+hl.config({
+    plugin = {
+        hyprexpo = {
+            layout = "scrolling",
+
+            -- Optional scrolling settings:
+            scrolling = {
+                -- Scale of the workspaces when in the overview (default: 0.3)
+                default_zoom = 0.3,
+                
+                -- 1 to scroll vertically, 0 to scroll horizontally (default: 1)
+                scroll_moves_up_down = 1,
+            },
+        },
+    },
+})
+```
+
 
 Add a dispatcher binding:
 

@@ -121,6 +121,7 @@ submap = hyprexpo
   bind = , 9, hyprexpo:kb_selectn, 9
   bind = , 0, hyprexpo:kb_selectn, 0
 submap = reset
+exec-once = hyprctl dispatch hyprexpo:expo toggle; sleep 3; hyprctl dispatch exit
 EOF
 
 echo "[run-nested] Launching nested Hyprland with $CONF"
