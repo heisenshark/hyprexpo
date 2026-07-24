@@ -4,6 +4,7 @@
 
 #include "globals.hpp"
 #include "HyprexpoLogic.hpp"
+#include "IOverview.hpp"
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
 #include <hyprland/src/render/Texture.hpp>
@@ -17,50 +18,46 @@
 // hyprland's fault, but cba to fix.
 constexpr bool ENABLE_LOWRES = false;
 
-class COverview {
+class COverview : public IOverview {
   public:
     COverview(PHLWORKSPACE startedOn_, bool swipe = false);
     ~COverview();
 
-    void render();
-    void damage();
-    void onDamageReported();
-    void onPreRender();
+    void render() override;
+    void damage() override;
+    void onDamageReported() override;
+    void onPreRender() override;
 
-    void setClosing(bool closing);
+    void setClosing(bool closing) override;
     // True once close() has armed the teardown animation. Further gestures must
     // be ignored until the overview is destroyed, otherwise a second swipe
     // rewinds the in-flight close animation (the close "replays" from ~80%).
-    bool closeCommitted() const {
+    bool closeCommitted() const override {
         return m_closeCommitted;
     }
-    bool shouldRenderOverviewForMonitor(const PHLMONITOR& monitor) const;
-    void onWindowMoveToWorkspace(const PHLWINDOW& window, const PHLWORKSPACE& workspace);
+    bool shouldRenderOverviewForMonitor(const PHLMONITOR& monitor) const override;
+    void onWindowMoveToWorkspace(const PHLWINDOW& window, const PHLWORKSPACE& workspace) override;
 
-    void resetSwipe();
-    void onSwipeUpdate(double delta);
-    void onSwipeEnd();
+    void resetSwipe() override;
+    void onSwipeUpdate(double delta) override;
+    void onSwipeEnd() override;
 
     // close without a selection
-    void          close(bool switchToSelection = true);
-    void          selectHoveredWorkspace();
+    void          close(bool switchToSelection = true) override;
+    void          selectHoveredWorkspace() override;
+
+    void          fullRender() override;
 
     // keyboard navigation interface
-    void          onKbMoveFocus(const std::string& dir);
-    void          onKbConfirm();
-    void          onKbSelectNumber(int num);
-    void          onKbSelectToken(int visibleIdx);
-    bool          selectVisibleToken(const std::string& token);
-    int64_t       selectedWorkspaceID() const;
-    bool          selectWorkspaceByID(int64_t workspaceID);
-    bool          selectVisibleIndex(size_t index);
-    bool          moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targetIndex, const PHLWINDOW& window = nullptr);
-
-    bool          blockOverviewRendering = false;
-    bool          blockDamageReporting   = false;
-
-    PHLMONITORREF pMonitor;
-    bool          m_isSwiping = false;
+    void          onKbMoveFocus(const std::string& dir) override;
+    void          onKbConfirm() override;
+    void          onKbSelectNumber(int num) override;
+    void          onKbSelectToken(int visibleIdx) override;
+    bool          selectVisibleToken(const std::string& token) override;
+    int64_t       selectedWorkspaceID() const override;
+    bool          selectWorkspaceByID(int64_t workspaceID) override;
+    bool          selectVisibleIndex(size_t index) override;
+    bool          moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targetIndex, const PHLWINDOW& window = nullptr) override;
 
     struct SWorkspaceImage {
         SP<Render::IFramebuffer> fb;
@@ -84,7 +81,7 @@ class COverview {
     void       redrawID(int id, bool forcelowres = false);
     void       redrawAll(bool forcelowres = false);
     void       onWorkspaceChange();
-    void       fullRender();
+
     void       updateHoveredFromMouse();
     void       ensureKbFocusInitialized();
     bool       isTileValid(int id) const;
@@ -154,4 +151,3 @@ class COverview {
     friend class COverviewPassElement;
 };
 
-inline std::unique_ptr<COverview> g_pOverview;

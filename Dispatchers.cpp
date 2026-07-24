@@ -5,6 +5,7 @@
 #include "ExpoGesture.hpp"
 #include "HyprexpoConfig.hpp"
 #include "Overview.hpp"
+#include "ScrollOverview.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
@@ -441,7 +442,15 @@ static SDispatchResult onExpoDispatcher(std::string arg) {
             if (!PMONITOR)
                 return {};
             renderingOverview = true;
-            g_pOverview       = std::make_unique<COverview>(PMONITOR->m_activeWorkspace);
+            static auto* const* PLAYOUT = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:layout")->getDataStaticPtr();
+            bool isScrolling = false;
+            if (PLAYOUT && *PLAYOUT)
+                isScrolling = std::string(*PLAYOUT) == "scrolling";
+
+            if (isScrolling)
+                g_pOverview = std::make_unique<CScrollOverview>(PMONITOR->m_activeWorkspace);
+            else
+                g_pOverview = std::make_unique<COverview>(PMONITOR->m_activeWorkspace);
             renderingOverview = false;
         }
         return {};
@@ -467,7 +476,15 @@ static SDispatchResult onExpoDispatcher(std::string arg) {
         return {};
 
     renderingOverview = true;
-    g_pOverview       = std::make_unique<COverview>(PMONITOR->m_activeWorkspace);
+    static auto* const* PLAYOUT = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:layout")->getDataStaticPtr();
+    bool isScrolling = false;
+    if (PLAYOUT && *PLAYOUT)
+        isScrolling = std::string(*PLAYOUT) == "scrolling";
+
+    if (isScrolling)
+        g_pOverview = std::make_unique<CScrollOverview>(PMONITOR->m_activeWorkspace);
+    else
+        g_pOverview = std::make_unique<COverview>(PMONITOR->m_activeWorkspace);
     renderingOverview = false;
     return {};
 }

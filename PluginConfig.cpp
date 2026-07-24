@@ -26,6 +26,9 @@ void registerHyprexpoConfigValues() {
     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:skip_empty", "skip empty workspaces", HyprexpoConfig::SKIP_EMPTY_DEFAULT));
     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:max_workspace", "maximum sequential workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:show_workspace_numbers", "force workspace ID labels", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT));
+    addConfigValue(makeShared<Config::Values::CStringValue>("plugin:hyprexpo:layout", "layout", "grid"));
+    addConfigValue(makeShared<Config::Values::CFloatValue>("plugin:hyprexpo:scrolling:default_zoom", "default zoom", 0.3f));
+    addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:scrolling:scroll_moves_up_down", "scroll moves up down", 1));
 
     addConfigValue(makeShared<Config::Values::CIntValue>("plugin:hyprexpo:gesture_distance", "gesture distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
     addConfigValue(createCancelKeyConfig());

@@ -17,6 +17,7 @@ set(HYPREXPO_SRC
     ExpoGesture.cpp
     OverviewPassElement.cpp
     HyprexpoLogic.cpp
+    ScrollOverview.cpp
 )
 
 add_library(hyprexpo SHARED ${HYPREXPO_SRC})
