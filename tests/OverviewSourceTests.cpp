@@ -75,6 +75,16 @@ int main() {
     expect(mainSource.find("_ZN8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE") == std::string::npos,
            "damage hook no longer uses the pre-0.56 monitor symbol");
 
+    const auto scrollSource = readFile("ScrollOverview.cpp");
+    expect(!scrollSource.empty(), "ScrollOverview.cpp can be read from repo root");
+    expect(scrollSource.find("enterSubmapIfEnabled();") != std::string::npos, "ScrollOverview constructor enters submap if enabled");
+    expect(scrollSource.find("resetSubmapIfNeeded();") != std::string::npos, "ScrollOverview close/destructor resets submap if needed");
+
+    const auto iOverviewSource = readFile("IOverview.hpp");
+    expect(!iOverviewSource.empty(), "IOverview.hpp can be read from repo root");
+    expect(iOverviewSource.find("enterSubmapIfEnabled();") != std::string::npos, "IOverview base class declares enterSubmapIfEnabled");
+    expect(iOverviewSource.find("resetSubmapIfNeeded();") != std::string::npos, "IOverview base class declares resetSubmapIfNeeded");
+
     if (failures != 0)
         return 1;
 

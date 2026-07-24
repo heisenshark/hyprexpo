@@ -50,6 +50,7 @@ CScrollOverview::~CScrollOverview() {
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     images.clear(); // otherwise we get a vram leak
     Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_UNKNOWN);
+    resetSubmapIfNeeded();
 }
 
 CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn_), swipe(swipe_) {
@@ -134,6 +135,7 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
     }
 
     viewportCurrentWorkspace = activeIdx;
+    enterSubmapIfEnabled();
 }
 
 void CScrollOverview::selectHoveredWorkspace() {
@@ -344,6 +346,7 @@ void CScrollOverview::close(bool switchToSelection) {
         return;
 
     closing = true;
+    resetSubmapIfNeeded();
 
     if (!closeOnWindow)
         closeOnWindow = Desktop::focusState()->window();

@@ -9,7 +9,7 @@
 class IOverview {
   public:
     IOverview()          = default;
-    virtual ~IOverview() = default;
+    virtual ~IOverview();
 
     virtual void  render()           = 0;
     virtual void  damage()           = 0;
@@ -40,11 +40,15 @@ class IOverview {
     virtual bool  selectVisibleIndex(size_t index) = 0;
     virtual bool  moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targetIndex, const PHLWINDOW& window = nullptr) = 0;
 
+    void          enterSubmapIfEnabled();
+    void          resetSubmapIfNeeded();
+
     bool          blockOverviewRendering = false;
     bool          blockDamageReporting   = false;
 
     PHLMONITORREF pMonitor;
     bool          m_isSwiping = false;
+    bool          submapActive = false;
 };
 
 inline std::unique_ptr<IOverview> g_pOverview;

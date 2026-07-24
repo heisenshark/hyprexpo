@@ -97,8 +97,6 @@ class COverview : public IOverview {
     PHLWINDOW  windowAtTilePoint(int id, const Vector2D& localPoint) const;
     Vector2D   tilePointToWorkspacePoint(int id, const Vector2D& localPoint) const;
     PHLWORKSPACE ensureWorkspaceForTile(int id);
-    void       enterSubmapIfEnabled();
-    void       resetSubmapIfNeeded();
 
     int        SIDE_LENGTH = 3;
     int        GAP_WIDTH   = 5;
@@ -112,7 +110,6 @@ class COverview : public IOverview {
     int                          closeOnID = -1;
     int                          kbFocusID = -1;
     int                          hoveredID = -1;
-    bool                         submapActive = false;
 
     Vector2D                     dragStartLocal = Vector2D{};
     int                          dragSourceID   = -1;

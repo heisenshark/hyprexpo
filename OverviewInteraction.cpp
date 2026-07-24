@@ -648,7 +648,11 @@ void COverview::onSwipeEnd() {
     m_isSwiping       = false;
 }
 
-void COverview::enterSubmapIfEnabled() {
+IOverview::~IOverview() {
+    resetSubmapIfNeeded();
+}
+
+void IOverview::enterSubmapIfEnabled() {
     static auto* const* PKEYNAV = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:keynav_enable")->getDataStaticPtr();
     if (**PKEYNAV && !submapActive) {
         // switch to a dedicated submap for hyprexpo navigation
@@ -657,7 +661,7 @@ void COverview::enterSubmapIfEnabled() {
     }
 }
 
-void COverview::resetSubmapIfNeeded() {
+void IOverview::resetSubmapIfNeeded() {
     if (submapActive) {
         g_pKeybindManager->m_dispatchers["submap"]("reset");
         submapActive = false;
