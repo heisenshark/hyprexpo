@@ -81,6 +81,8 @@ int main() {
     expect(scrollSource.find("resetSubmapIfNeeded();") != std::string::npos, "ScrollOverview close/destructor resets submap if needed");
     expect(scrollSource.find("void CScrollOverview::onKbMoveFocus(const std::string& dir)") != std::string::npos, "ScrollOverview implements directional keyboard focus");
     expect(scrollSource.find("void CScrollOverview::onKbConfirm()") != std::string::npos, "ScrollOverview implements keyboard confirm");
+    expect(scrollSource.find("images[viewportCurrentWorkspace]->pWorkspace") != std::string::npos, "ScrollOverview targets viewport workspace when no window is selected");
+    expect(scrollSource.find("closeOnWindow = nullptr;") != std::string::npos, "ScrollOverview allows closing on empty workspace targets without forcing window focus");
 
     const auto iOverviewSource = readFile("IOverview.hpp");
     expect(!iOverviewSource.empty(), "IOverview.hpp can be read from repo root");
