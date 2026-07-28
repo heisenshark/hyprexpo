@@ -62,6 +62,23 @@ static void failNotif(const std::string& reason) {
     HyprlandAPI::addNotification(PHANDLE, "[hyprexpo] Failure in initialization: " + reason, CHyprColor{1.0, 0.2, 0.2, 1.0}, 5000);
 }
 
+static bool hashesCompatible(const std::string& h1, const std::string& h2) {
+    if (h1 == h2)
+        return true;
+    if (h1.empty() || h2.empty())
+        return true;
+    if (h1.starts_with(h2) || h2.starts_with(h1))
+        return true;
+    const auto stripDirty = [](std::string s) {
+        if (s.ends_with("-dirty"))
+            s.erase(s.size() - 6);
+        return s;
+    };
+    const std::string s1 = stripDirty(h1);
+    const std::string s2 = stripDirty(h2);
+    return s1 == s2 || s1.starts_with(s2) || s2.starts_with(s1);
+}
+
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
     return HYPRLAND_API_VERSION;
 }
@@ -70,6 +87,13 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     PHANDLE = handle;
 
     const std::string HASH = __hyprland_api_get_hash();
+    const std::string CLIENT_HASH = __hyprland_api_get_client_hash();
+
+    const bool compat = hashesCompatible(HASH, CLIENT_HASH);
+    const std::string status = (HASH == CLIENT_HASH) ? "exact match" : (compat ? "compatible prefix match" : "MISMATCH");
+    const CHyprColor notifColor = compat ? CHyprColor{0.2, 0.8, 0.4, 1.0} : CHyprColor{1.0, 0.3, 0.2, 1.0};
+
+    HyprlandAPI::addNotification(PHANDLE, "[hyprexpo] Loaded (" + status + ")\nrunning: " + HASH + "\nheader: " + CLIENT_HASH, notifColor, 10000);
 
     if (HASH != __hyprland_api_get_client_hash()) {
         failNotif("Version mismatch (headers ver is not equal to running hyprland ver)");
