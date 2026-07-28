@@ -53,6 +53,7 @@ class CScrollOverview : public IOverview {
     void   onWorkspaceChange();
     void   highlightHoverDebug();
     void   moveViewportWorkspace(bool up);
+    void   updateViewportOffset();
 
     bool   damageDirty              = false;
     size_t viewportCurrentWorkspace = 0;
@@ -71,6 +72,7 @@ class CScrollOverview : public IOverview {
         PHLWORKSPACE                  pWorkspace;
         CBox                          box;
         std::vector<SP<SWindowImage>> windowImages;
+        PHLANIMVAR<float>             hScrollX;
     };
 
     SP<Render::IFramebuffer>         backgroundFb;

@@ -67,6 +67,8 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
         if (w && w->m_monitor == pMonitor && !w->m_isSpecialWorkspace) {
             auto img = makeShared<SWorkspaceImage>();
             img->pWorkspace = w;
+            Animation::mgr()->createAnimation(0.F, img->hScrollX, Config::animationTree()->getAnimationPropertyConfig("windowsMove"), AVARDAMAGE_NONE);
+            img->hScrollX->setUpdateCallback(damageMonitor);
             images.emplace_back(img);
         }
     }
@@ -151,6 +153,7 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
         }
     }
 
+    updateViewportOffset();
     enterSubmapIfEnabled();
 }
 
@@ -168,13 +171,16 @@ void CScrollOverview::selectHoveredWorkspace() {
     float yoff = -(float)activeIdx * pMonitor->m_size.y * scale->value();
     bool foundWin = false;
 
-    for (const auto& wimg : images) {
+    for (size_t i = 0; i < images.size(); ++i) {
+        const auto& wimg = images[i];
+        float wsXOff = wimg->hScrollX ? wimg->hScrollX->value() : 0.F;
+        Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
+
         for (const auto& img : wimg->windowImages) {
             if (!img->pWindow)
                 continue;
             CBox texbox = {img->pWindow->m_realPosition->value() - pMonitor->m_position, img->pWindow->m_realSize->value()};
-            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-            texbox.translate({0.F, yoff});
+            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
 
             if (texbox.containsPoint(lastMousePosLocal)) {
                 closeOnWindow = img->pWindow;
@@ -190,9 +196,11 @@ void CScrollOverview::selectHoveredWorkspace() {
     if (!foundWin) {
         yoff = -(float)activeIdx * pMonitor->m_size.y * scale->value();
         for (size_t i = 0; i < images.size(); ++i) {
+            float wsXOff = images[i]->hScrollX ? images[i]->hScrollX->value() : 0.F;
+            Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
+
             CBox wsBox = CBox{{}, pMonitor->m_size};
-            wsBox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-            wsBox.translate({0.F, yoff});
+            wsBox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
 
             if (wsBox.containsPoint(lastMousePosLocal)) {
                 viewportCurrentWorkspace = i;
@@ -202,9 +210,11 @@ void CScrollOverview::selectHoveredWorkspace() {
             yoff += pMonitor->m_size.y * scale->value();
         }
     }
+
+    updateViewportOffset();
 }
 
-void CScrollOverview::moveViewportWorkspace(bool up) {
+void CScrollOverview::updateViewportOffset() {
     size_t activeIdx = 0;
     for (size_t i = 0; i < images.size(); ++i) {
         if (images[i]->pWorkspace && images[i]->pWorkspace == startedOn) {
@@ -213,6 +223,26 @@ void CScrollOverview::moveViewportWorkspace(bool up) {
         }
     }
 
+    float targetY = (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y;
+    *viewOffset = Vector2D{0.F, targetY};
+
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        for (size_t i = 0; i < images.size(); ++i) {
+            if (images[i]->pWorkspace == win->m_workspace) {
+                Vector2D winLocalCenter = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                Vector2D monitorCenter = pMonitor->m_size / 2.0;
+                float targetX = winLocalCenter.x - monitorCenter.x;
+
+                if (images[i]->hScrollX)
+                    *images[i]->hScrollX = targetX;
+                break;
+            }
+        }
+    }
+}
+
+void CScrollOverview::moveViewportWorkspace(bool up) {
     if (viewportCurrentWorkspace == 0 && !up)
         return;
     if (viewportCurrentWorkspace == images.size() - 1 && up)
@@ -223,8 +253,6 @@ void CScrollOverview::moveViewportWorkspace(bool up) {
     else
         viewportCurrentWorkspace--;
 
-    *viewOffset = {viewOffset->value().x, (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y};
-
     closeOnWindow = nullptr;
     if (viewportCurrentWorkspace < images.size()) {
         for (const auto& img : images[viewportCurrentWorkspace]->windowImages) {
@@ -234,6 +262,8 @@ void CScrollOverview::moveViewportWorkspace(bool up) {
             }
         }
     }
+
+    updateViewportOffset();
 }
 
 void CScrollOverview::highlightHoverDebug() {
@@ -493,8 +523,12 @@ void CScrollOverview::fullRender() {
     }
 
     float yoff = -(float)activeIdx * pMonitor->m_size.y * scale->value();
-    for (const auto& wimg : images) {
+    for (size_t i = 0; i < images.size(); ++i) {
+        const auto& wimg = images[i];
         bool dirty = false;
+
+        float wsXOff = wimg->hScrollX ? wimg->hScrollX->value() : 0.F;
+        Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
 
         for (const auto& img : wimg->windowImages) {
             if (!img->pWindow) {
@@ -504,8 +538,7 @@ void CScrollOverview::fullRender() {
 
             CBox texbox = CBox{img->pWindow->m_realPosition->value() - pMonitor->m_position, pMonitor->m_size};
 
-            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-            texbox.translate({0.F, yoff});
+            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
 
             texbox.scale(pMonitor->m_scale).round();
             CRegion damage{0, 0, INT16_MAX, INT16_MAX};
@@ -513,15 +546,13 @@ void CScrollOverview::fullRender() {
 
             if (img->highlight) {
                 CBox texbox2 = CBox{img->pWindow->m_realPosition->value() - pMonitor->m_position, img->pWindow->m_realSize->value()};
-                texbox2.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-                texbox2.translate({0.F, yoff});
+                texbox2.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
                 texbox2.scale(pMonitor->m_scale).round();
                 Render::GL::g_pHyprOpenGL->renderRect(texbox2, CHyprColor{0.5, 0.0, 0.0, 0.5}, Render::GL::CHyprOpenGLImpl::SRectRenderData{.round = 5});
             }
         }
         CBox floatbox = CBox{pMonitor->m_position + Vector2D{0.F, yoff / scale->value()}, pMonitor->m_size};
-        floatbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-        floatbox.translate({0.F, yoff});
+        floatbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
         floatbox.scale(pMonitor->m_scale).round();
         Render::GL::g_pHyprOpenGL->renderTextureInternal(floatingFb->getTexture(), floatbox, Render::GL::CHyprOpenGLImpl::STextureRenderData{.damage = &damage, .a = 1.0f});
 
@@ -544,9 +575,11 @@ void CScrollOverview::fullRender() {
         }
         if (foundWin) {
             float yoff = (sc<float>(winWsIdx) - sc<float>(activeIdx)) * pMonitor->m_size.y * scale->value();
+            float wsXOff = images[winWsIdx]->hScrollX ? images[winWsIdx]->hScrollX->value() : 0.F;
+            Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
+
             CBox texbox = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()};
-            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-            texbox.translate({0.F, yoff});
+            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
             texbox.scale(pMonitor->m_scale).round();
 
             const int roundPx = std::min(std::max(0, (int)std::lround(5.0 * pMonitor->m_scale)), (int)std::min(texbox.w, texbox.h) / 2);
@@ -554,9 +587,11 @@ void CScrollOverview::fullRender() {
         }
     } else if (!closeOnWindow && viewportCurrentWorkspace < images.size()) {
         float yoff = (sc<float>(viewportCurrentWorkspace) - sc<float>(activeIdx)) * pMonitor->m_size.y * scale->value();
+        float wsXOff = images[viewportCurrentWorkspace]->hScrollX ? images[viewportCurrentWorkspace]->hScrollX->value() : 0.F;
+        Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
+
         CBox wsBox = CBox{{}, pMonitor->m_size};
-        wsBox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(-viewOffset->value() * scale->value());
-        wsBox.translate({0.F, yoff});
+        wsBox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
         wsBox.scale(pMonitor->m_scale).round();
 
         const int roundPx = std::max(0, (int)std::lround(8.0 * pMonitor->m_scale));
@@ -650,21 +685,14 @@ bool CScrollOverview::selectVisibleIndex(size_t index) {
         return false;
 
     viewportCurrentWorkspace = index;
-    size_t activeIdx = 0;
-    for (size_t i = 0; i < images.size(); ++i) {
-        if (images[i]->pWorkspace && images[i]->pWorkspace == startedOn) {
-            activeIdx = i;
-            break;
-        }
-    }
-    *viewOffset = {viewOffset->value().x, (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y};
-
+    closeOnWindow = nullptr;
     for (const auto& img : images[index]->windowImages) {
         if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
             closeOnWindow = img->pWindow;
             break;
         }
     }
+    updateViewportOffset();
     damage();
     return true;
 }
@@ -774,7 +802,6 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
             closeOnWindow = bestWin;
         } else if (currentWsIdx + 1 < images.size()) {
             viewportCurrentWorkspace = currentWsIdx + 1;
-            *viewOffset = {viewOffset->value().x, (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y};
 
             PHLWINDOW nextWin = nullptr;
             double bestDx = std::numeric_limits<double>::max();
@@ -791,6 +818,7 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
             }
             closeOnWindow = nextWin;
         }
+        updateViewportOffset();
         damage();
     } else if (dir == "up") {
         PHLWINDOW bestWin = nullptr;
@@ -820,7 +848,6 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
             closeOnWindow = bestWin;
         } else if (currentWsIdx > 0) {
             viewportCurrentWorkspace = currentWsIdx - 1;
-            *viewOffset = {viewOffset->value().x, (sc<long>(viewportCurrentWorkspace) - sc<long>(activeIdx)) * pMonitor->m_size.y};
 
             PHLWINDOW prevWin = nullptr;
             double bestDx = std::numeric_limits<double>::max();
@@ -837,6 +864,7 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
             }
             closeOnWindow = prevWin;
         }
+        updateViewportOffset();
         damage();
     } else if (dir == "left") {
         if (!currentWin) {
@@ -880,6 +908,7 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
         }
         if (bestWin)
             closeOnWindow = bestWin;
+        updateViewportOffset();
         damage();
     } else if (dir == "right") {
         if (!currentWin) {
@@ -923,6 +952,7 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
         }
         if (bestWin)
             closeOnWindow = bestWin;
+        updateViewportOffset();
         damage();
     }
 }
