@@ -9,6 +9,7 @@
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <vector>
+#include <optional>
 
 class CMonitor;
 
@@ -73,6 +74,7 @@ class CScrollOverview : public IOverview {
         CBox                          box;
         std::vector<SP<SWindowImage>> windowImages;
         PHLANIMVAR<float>             hScrollX;
+        PHLWINDOWREF                  lastFocusedWindow;
     };
 
     SP<Render::IFramebuffer>         backgroundFb;
@@ -81,6 +83,7 @@ class CScrollOverview : public IOverview {
     Vector2D                         lastMousePosLocal = Vector2D{};
 
     PHLWINDOWREF                     closeOnWindow;
+    std::optional<double>            preferredKbCenterX;
 
     std::vector<SP<SWorkspaceImage>> images;
     SP<SWorkspaceImage>              imageForWorkspace(PHLWORKSPACE w);

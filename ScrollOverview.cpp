@@ -153,6 +153,13 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
         }
     }
 
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
+        if (viewportCurrentWorkspace < images.size())
+            images[viewportCurrentWorkspace]->lastFocusedWindow = closeOnWindow;
+    }
+
     updateViewportOffset();
     enterSubmapIfEnabled();
 }
@@ -209,6 +216,13 @@ void CScrollOverview::selectHoveredWorkspace() {
             }
             yoff += pMonitor->m_size.y * scale->value();
         }
+    }
+
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
+        if (viewportCurrentWorkspace < images.size())
+            images[viewportCurrentWorkspace]->lastFocusedWindow = closeOnWindow;
     }
 
     updateViewportOffset();
@@ -686,12 +700,25 @@ bool CScrollOverview::selectVisibleIndex(size_t index) {
 
     viewportCurrentWorkspace = index;
     closeOnWindow = nullptr;
-    for (const auto& img : images[index]->windowImages) {
-        if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
-            closeOnWindow = img->pWindow;
-            break;
+    preferredKbCenterX.reset();
+
+    if (images[index]->lastFocusedWindow && Desktop::View::validMapped(images[index]->lastFocusedWindow.lock())) {
+        closeOnWindow = images[index]->lastFocusedWindow;
+    } else {
+        for (const auto& img : images[index]->windowImages) {
+            if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
+                closeOnWindow = img->pWindow;
+                images[index]->lastFocusedWindow = closeOnWindow;
+                break;
+            }
         }
     }
+
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
+    }
+
     updateViewportOffset();
     damage();
     return true;
@@ -759,20 +786,29 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
     }
 
     if (!currentWin && currentWsIdx < images.size()) {
-        const auto focused = Desktop::focusState()->window();
-        if (focused && Desktop::View::validMapped(focused) && focused->m_workspace == images[currentWsIdx]->pWorkspace) {
-            currentWin = focused;
+        if (images[currentWsIdx]->lastFocusedWindow && Desktop::View::validMapped(images[currentWsIdx]->lastFocusedWindow.lock())) {
+            currentWin = images[currentWsIdx]->lastFocusedWindow.lock();
         } else {
-            for (const auto& img : images[currentWsIdx]->windowImages) {
-                if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
-                    currentWin = img->pWindow.lock();
-                    break;
+            const auto focused = Desktop::focusState()->window();
+            if (focused && Desktop::View::validMapped(focused) && focused->m_workspace == images[currentWsIdx]->pWorkspace) {
+                currentWin = focused;
+            } else {
+                for (const auto& img : images[currentWsIdx]->windowImages) {
+                    if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
+                        currentWin = img->pWindow.lock();
+                        break;
+                    }
                 }
             }
         }
     }
 
     Vector2D currentLocalCenter = currentWin ? CBox{currentWin->m_realPosition->value() - pMonitor->m_position, currentWin->m_realSize->value()}.middle() : (pMonitor->m_size / 2.0);
+
+    if (currentWin && !preferredKbCenterX.has_value()) {
+        preferredKbCenterX = currentLocalCenter.x;
+    }
+    double targetRefX = preferredKbCenterX.value_or(currentLocalCenter.x);
 
     if (dir == "down") {
         PHLWINDOW bestWin = nullptr;
@@ -787,7 +823,7 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
 
                 Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
                 double dy = center.y - currentLocalCenter.y;
-                double dx = center.x - currentLocalCenter.x;
+                double dx = center.x - targetRefX;
                 if (dy > 20.0) {
                     double score = dy + 1.5 * std::abs(dx);
                     if (score < bestScore) {
@@ -800,23 +836,36 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
 
         if (bestWin) {
             closeOnWindow = bestWin;
+            images[currentWsIdx]->lastFocusedWindow = bestWin;
+            Vector2D center = CBox{bestWin->m_realPosition->value() - pMonitor->m_position, bestWin->m_realSize->value()}.middle();
+            preferredKbCenterX = center.x;
         } else if (currentWsIdx + 1 < images.size()) {
             viewportCurrentWorkspace = currentWsIdx + 1;
 
             PHLWINDOW nextWin = nullptr;
-            double bestDx = std::numeric_limits<double>::max();
-            for (const auto& img : images[viewportCurrentWorkspace]->windowImages) {
-                if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
-                    continue;
-                PHLWINDOW win = img->pWindow.lock();
-                Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
-                double dx = std::abs(center.x - currentLocalCenter.x);
-                if (dx < bestDx) {
-                    bestDx = dx;
-                    nextWin = win;
+            if (images[viewportCurrentWorkspace]->lastFocusedWindow && Desktop::View::validMapped(images[viewportCurrentWorkspace]->lastFocusedWindow.lock())) {
+                nextWin = images[viewportCurrentWorkspace]->lastFocusedWindow.lock();
+            } else {
+                double bestDx = std::numeric_limits<double>::max();
+                for (const auto& img : images[viewportCurrentWorkspace]->windowImages) {
+                    if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                        continue;
+                    PHLWINDOW win = img->pWindow.lock();
+                    Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                    double dx = std::abs(center.x - targetRefX);
+                    if (dx < bestDx) {
+                        bestDx = dx;
+                        nextWin = win;
+                    }
                 }
+                if (nextWin)
+                    images[viewportCurrentWorkspace]->lastFocusedWindow = nextWin;
             }
             closeOnWindow = nextWin;
+            if (nextWin) {
+                Vector2D center = CBox{nextWin->m_realPosition->value() - pMonitor->m_position, nextWin->m_realSize->value()}.middle();
+                preferredKbCenterX = center.x;
+            }
         }
         updateViewportOffset();
         damage();
@@ -833,7 +882,7 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
 
                 Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
                 double dy = currentLocalCenter.y - center.y;
-                double dx = center.x - currentLocalCenter.x;
+                double dx = center.x - targetRefX;
                 if (dy > 20.0) {
                     double score = dy + 1.5 * std::abs(dx);
                     if (score < bestScore) {
@@ -846,23 +895,36 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
 
         if (bestWin) {
             closeOnWindow = bestWin;
+            images[currentWsIdx]->lastFocusedWindow = bestWin;
+            Vector2D center = CBox{bestWin->m_realPosition->value() - pMonitor->m_position, bestWin->m_realSize->value()}.middle();
+            preferredKbCenterX = center.x;
         } else if (currentWsIdx > 0) {
             viewportCurrentWorkspace = currentWsIdx - 1;
 
             PHLWINDOW prevWin = nullptr;
-            double bestDx = std::numeric_limits<double>::max();
-            for (const auto& img : images[viewportCurrentWorkspace]->windowImages) {
-                if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
-                    continue;
-                PHLWINDOW win = img->pWindow.lock();
-                Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
-                double dx = std::abs(center.x - currentLocalCenter.x);
-                if (dx < bestDx) {
-                    bestDx = dx;
-                    prevWin = win;
+            if (images[viewportCurrentWorkspace]->lastFocusedWindow && Desktop::View::validMapped(images[viewportCurrentWorkspace]->lastFocusedWindow.lock())) {
+                prevWin = images[viewportCurrentWorkspace]->lastFocusedWindow.lock();
+            } else {
+                double bestDx = std::numeric_limits<double>::max();
+                for (const auto& img : images[viewportCurrentWorkspace]->windowImages) {
+                    if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()))
+                        continue;
+                    PHLWINDOW win = img->pWindow.lock();
+                    Vector2D center = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle();
+                    double dx = std::abs(center.x - targetRefX);
+                    if (dx < bestDx) {
+                        bestDx = dx;
+                        prevWin = win;
+                    }
                 }
+                if (prevWin)
+                    images[viewportCurrentWorkspace]->lastFocusedWindow = prevWin;
             }
             closeOnWindow = prevWin;
+            if (prevWin) {
+                Vector2D center = CBox{prevWin->m_realPosition->value() - pMonitor->m_position, prevWin->m_realSize->value()}.middle();
+                preferredKbCenterX = center.x;
+            }
         }
         updateViewportOffset();
         damage();
@@ -906,8 +968,12 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
                 }
             }
         }
-        if (bestWin)
+        if (bestWin) {
             closeOnWindow = bestWin;
+            images[currentWsIdx]->lastFocusedWindow = bestWin;
+            Vector2D center = CBox{bestWin->m_realPosition->value() - pMonitor->m_position, bestWin->m_realSize->value()}.middle();
+            preferredKbCenterX = center.x;
+        }
         updateViewportOffset();
         damage();
     } else if (dir == "right") {
@@ -950,8 +1016,12 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
                 }
             }
         }
-        if (bestWin)
+        if (bestWin) {
             closeOnWindow = bestWin;
+            images[currentWsIdx]->lastFocusedWindow = bestWin;
+            Vector2D center = CBox{bestWin->m_realPosition->value() - pMonitor->m_position, bestWin->m_realSize->value()}.middle();
+            preferredKbCenterX = center.x;
+        }
         updateViewportOffset();
         damage();
     }
