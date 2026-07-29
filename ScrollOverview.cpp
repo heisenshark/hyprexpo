@@ -558,6 +558,31 @@ void CScrollOverview::fullRender() {
             CRegion damage{0, 0, INT16_MAX, INT16_MAX};
             Render::GL::g_pHyprOpenGL->renderTextureInternal(img->fb->getTexture(), texbox, Render::GL::CHyprOpenGLImpl::STextureRenderData{.damage = &damage, .a = 1.0f * img->pWindow->m_alpha.value()});
 
+            PHLWINDOW win = img->pWindow.lock();
+            if (win) {
+                CBox winBox = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()};
+                winBox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
+                winBox.scale(pMonitor->m_scale).round();
+
+                int bSize = win->getRealBorderSize();
+                if (bSize <= 0)
+                    bSize = 2;
+
+                const int scaledBSize = std::max(1, (int)std::lround(bSize * scale->value() * pMonitor->m_scale));
+                const int roundPx     = std::max(0, (int)std::lround(win->rounding() * scale->value() * pMonitor->m_scale));
+
+                Config::CGradientValueData grad = win->m_realBorderColor;
+                if (grad.m_colors.empty())
+                    grad = Config::CGradientValueData(CHyprColor{0.5f, 0.5f, 0.5f, 0.8f});
+
+                Render::GL::g_pHyprOpenGL->renderBorder(winBox, grad, Render::GL::CHyprOpenGLImpl::SBorderRenderData{
+                    .round = roundPx,
+                    .roundingPower = win->roundingPower(),
+                    .borderSize = scaledBSize,
+                    .a = 1.0f * win->m_alpha.value()
+                });
+            }
+
             if (img->highlight) {
                 CBox texbox2 = CBox{img->pWindow->m_realPosition->value() - pMonitor->m_position, img->pWindow->m_realSize->value()};
                 texbox2.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
