@@ -4,6 +4,8 @@
 #include "globals.hpp"
 #include "IOverview.hpp"
 #include <hyprland/src/desktop/DesktopTypes.hpp>
+#include <hyprland/src/config/ConfigValue.hpp>
+#include <hyprland/src/config/shared/complex/ComplexDataTypes.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
 #include <hyprland/src/helpers/AnimatedVariable.hpp>
 #include <hyprland/src/helpers/signal/Signal.hpp>
@@ -86,8 +88,12 @@ class CScrollOverview : public IOverview {
     PHLWINDOWREF                     mouseHoveredWindow;
     std::optional<double>            preferredKbCenterX;
 
+    Config::CGradientValueData       activeBorderGradient;
+    Config::CGradientValueData       inactiveBorderGradient;
+
     PHLWINDOW                        getWindowAtPoint(const Vector2D& pointLocal);
     void                             updateMouseHover();
+    void                             redrawWindowFor(PHLWINDOW win);
 
     std::vector<SP<SWorkspaceImage>> images;
     SP<SWorkspaceImage>              imageForWorkspace(PHLWORKSPACE w);

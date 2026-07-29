@@ -86,10 +86,27 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
 
     lastMousePosLocal = g_pInputManager->getMouseCoordsInternal() - pMonitor->m_position;
 
+    for (const auto& w : Desktop::windowState()->windows()) {
+        if (w && Desktop::View::validMapped(w)) {
+            if (Desktop::focusState()->window() == w && !w->m_realBorderColor.m_colors.empty())
+                activeBorderGradient = w->m_realBorderColor;
+            else if (!w->m_realBorderColor.m_colors.empty())
+                inactiveBorderGradient = w->m_realBorderColor;
+        }
+    }
+    if (activeBorderGradient.m_colors.empty())
+        activeBorderGradient = Config::CGradientValueData(CHyprColor{0.2f, 0.6f, 1.0f, 1.0f});
+    if (inactiveBorderGradient.m_colors.empty())
+        inactiveBorderGradient = Config::CGradientValueData(CHyprColor{0.3f, 0.3f, 0.3f, 0.5f});
+
     auto onCursorMove = [this](Event::SCallbackInfo& info) {
         if (closing)
             return;
-        lastMousePosLocal = g_pInputManager->getMouseCoordsInternal() - pMonitor->m_position;
+        Vector2D currentMousePos = g_pInputManager->getMouseCoordsInternal() - pMonitor->m_position;
+        Vector2D delta = currentMousePos - lastMousePosLocal;
+        if (delta.x * delta.x + delta.y * delta.y < 1.0)
+            return;
+        lastMousePosLocal = currentMousePos;
         updateMouseHover();
     };
 
@@ -197,13 +214,34 @@ PHLWINDOW CScrollOverview::getWindowAtPoint(const Vector2D& pointLocal) {
     return nullptr;
 }
 
+void CScrollOverview::redrawWindowFor(PHLWINDOW win) {
+    if (!win)
+        return;
+    for (const auto& wimg : images) {
+        for (const auto& img : wimg->windowImages) {
+            if (img->pWindow && img->pWindow.lock() == win) {
+                redrawWindowImage(img);
+                return;
+            }
+        }
+    }
+}
+
 void CScrollOverview::updateMouseHover() {
     if (closing)
         return;
     PHLWINDOW hovered = getWindowAtPoint(lastMousePosLocal);
-    if (hovered && hovered != mouseHoveredWindow.lock()) {
+    if (hovered && hovered != closeOnWindow.lock()) {
+        PHLWINDOW oldWin = closeOnWindow ? closeOnWindow.lock() : nullptr;
         mouseHoveredWindow = hovered;
+        closeOnWindow = hovered;
+        if (hovered->m_workspace && hovered->m_workspace != pMonitor->m_activeWorkspace) {
+            (void)Config::Actions::changeWorkspace(std::to_string(hovered->m_workspace->m_id));
+        }
         Desktop::focusState()->fullWindowFocus(hovered, Desktop::eFocusReason::FOCUS_REASON_UNKNOWN);
+        if (oldWin && oldWin != hovered)
+            redrawWindowFor(oldWin);
+        redrawWindowFor(hovered);
         damage();
     }
 }
@@ -539,7 +577,6 @@ void CScrollOverview::close(bool switchToSelection) {
 }
 
 void CScrollOverview::onPreRender() {
-    updateMouseHover();
 }
 
 void CScrollOverview::onWorkspaceChange() {
@@ -621,9 +658,8 @@ void CScrollOverview::fullRender() {
                 const int scaledBSize = std::max(1, (int)std::lround(bSize * scale->value() * pMonitor->m_scale));
                 const int roundPx     = std::max(0, (int)std::lround(win->rounding() * scale->value() * pMonitor->m_scale));
 
-                Config::CGradientValueData grad = win->m_realBorderColor;
-                if (grad.m_colors.empty())
-                    grad = Config::CGradientValueData(CHyprColor{0.5f, 0.5f, 0.5f, 0.8f});
+                bool isFocused = (closeOnWindow && closeOnWindow.lock() == win);
+                Config::CGradientValueData grad = isFocused ? activeBorderGradient : inactiveBorderGradient;
 
                 Render::GL::g_pHyprOpenGL->renderBorder(winBox, grad, Render::GL::CHyprOpenGLImpl::SBorderRenderData{
                     .round = roundPx,
@@ -646,30 +682,7 @@ void CScrollOverview::fullRender() {
             std::erase_if(wimg->windowImages, [](const auto& e) { return !e->pWindow; });
     }
 
-    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
-        PHLWINDOW win = closeOnWindow.lock();
-        size_t winWsIdx = 0;
-        bool foundWin = false;
-        for (size_t i = 0; i < images.size(); ++i) {
-            if (images[i]->pWorkspace == win->m_workspace) {
-                winWsIdx = i;
-                foundWin = true;
-                break;
-            }
-        }
-        if (foundWin) {
-            float yoff = (sc<float>(winWsIdx) - sc<float>(activeIdx)) * pMonitor->m_size.y * scale->value();
-            float wsXOff = images[winWsIdx]->hScrollX ? images[winWsIdx]->hScrollX->value() : 0.F;
-            Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
-
-            CBox texbox = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()};
-            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
-            texbox.scale(pMonitor->m_scale).round();
-
-            const int roundPx = std::min(std::max(0, (int)std::lround(5.0 * pMonitor->m_scale)), (int)std::min(texbox.w, texbox.h) / 2);
-            Render::GL::g_pHyprOpenGL->renderRect(texbox, CHyprColor{0.2f, 0.6f, 1.0f, 0.45f}, Render::GL::CHyprOpenGLImpl::SRectRenderData{.round = roundPx});
-        }
-    } else if (!closeOnWindow && viewportCurrentWorkspace < images.size()) {
+    if (!closeOnWindow && viewportCurrentWorkspace < images.size()) {
         float yoff = (sc<float>(viewportCurrentWorkspace) - sc<float>(activeIdx)) * pMonitor->m_size.y * scale->value();
         float wsXOff = images[viewportCurrentWorkspace]->hScrollX ? images[viewportCurrentWorkspace]->hScrollX->value() : 0.F;
         Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
@@ -1099,8 +1112,15 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
 
     if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
         PHLWINDOW win = closeOnWindow.lock();
+        PHLWINDOW oldWin = mouseHoveredWindow ? mouseHoveredWindow.lock() : nullptr;
         mouseHoveredWindow = nullptr;
+        if (win->m_workspace && win->m_workspace != pMonitor->m_activeWorkspace) {
+            (void)Config::Actions::changeWorkspace(std::to_string(win->m_workspace->m_id));
+        }
         Desktop::focusState()->fullWindowFocus(win, Desktop::eFocusReason::FOCUS_REASON_KEYBIND);
+        if (oldWin && oldWin != win)
+            redrawWindowFor(oldWin);
+        redrawWindowFor(win);
     }
     damage();
 }
