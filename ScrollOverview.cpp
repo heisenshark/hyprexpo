@@ -90,6 +90,7 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
         if (closing)
             return;
         lastMousePosLocal = g_pInputManager->getMouseCoordsInternal() - pMonitor->m_position;
+        updateMouseHover();
     };
 
     auto onCursorSelect = [this](Event::SCallbackInfo& info) {
@@ -158,10 +159,53 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
         preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
         if (viewportCurrentWorkspace < images.size())
             images[viewportCurrentWorkspace]->lastFocusedWindow = closeOnWindow;
+        Desktop::focusState()->fullWindowFocus(win, Desktop::eFocusReason::FOCUS_REASON_UNKNOWN);
     }
 
     updateViewportOffset();
     enterSubmapIfEnabled();
+}
+
+PHLWINDOW CScrollOverview::getWindowAtPoint(const Vector2D& pointLocal) {
+    size_t activeIdx = 0;
+    for (size_t i = 0; i < images.size(); ++i) {
+        if (images[i]->pWorkspace && images[i]->pWorkspace == startedOn) {
+            activeIdx = i;
+            break;
+        }
+    }
+
+    const auto VIEWPORT_CENTER = CBox{{}, pMonitor->m_size}.middle();
+    float yoff = -(float)activeIdx * pMonitor->m_size.y * scale->value();
+
+    for (size_t i = 0; i < images.size(); ++i) {
+        const auto& wimg = images[i];
+        float wsXOff = wimg->hScrollX ? wimg->hScrollX->value() : 0.F;
+        Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
+
+        for (const auto& img : wimg->windowImages) {
+            if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()) || img->pWindow->m_isFloating)
+                continue;
+            CBox texbox = {img->lastWindowPosition - pMonitor->m_position, img->lastWindowSize};
+            texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
+
+            if (texbox.containsPoint(pointLocal))
+                return img->pWindow.lock();
+        }
+        yoff += pMonitor->m_size.y * scale->value();
+    }
+    return nullptr;
+}
+
+void CScrollOverview::updateMouseHover() {
+    if (closing)
+        return;
+    PHLWINDOW hovered = getWindowAtPoint(lastMousePosLocal);
+    if (hovered && hovered != mouseHoveredWindow.lock()) {
+        mouseHoveredWindow = hovered;
+        Desktop::focusState()->fullWindowFocus(hovered, Desktop::eFocusReason::FOCUS_REASON_UNKNOWN);
+        damage();
+    }
 }
 
 void CScrollOverview::selectHoveredWorkspace() {
@@ -275,6 +319,11 @@ void CScrollOverview::moveViewportWorkspace(bool up) {
                 break;
             }
         }
+    }
+
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        Desktop::focusState()->fullWindowFocus(win, Desktop::eFocusReason::FOCUS_REASON_UNKNOWN);
     }
 
     updateViewportOffset();
@@ -490,6 +539,7 @@ void CScrollOverview::close(bool switchToSelection) {
 }
 
 void CScrollOverview::onPreRender() {
+    updateMouseHover();
 }
 
 void CScrollOverview::onWorkspaceChange() {
@@ -560,7 +610,7 @@ void CScrollOverview::fullRender() {
 
             PHLWINDOW win = img->pWindow.lock();
             if (win) {
-                CBox winBox = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()};
+                CBox winBox = CBox{img->lastWindowPosition - pMonitor->m_position, img->lastWindowSize};
                 winBox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
                 winBox.scale(pMonitor->m_scale).round();
 
@@ -737,6 +787,7 @@ bool CScrollOverview::selectVisibleIndex(size_t index) {
     if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
         PHLWINDOW win = closeOnWindow.lock();
         preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
+        Desktop::focusState()->fullWindowFocus(win, Desktop::eFocusReason::FOCUS_REASON_UNKNOWN);
     }
 
     updateViewportOffset();
@@ -1045,4 +1096,11 @@ void CScrollOverview::onKbMoveFocus(const std::string& dir) {
         updateViewportOffset();
         damage();
     }
+
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+        PHLWINDOW win = closeOnWindow.lock();
+        mouseHoveredWindow = nullptr;
+        Desktop::focusState()->fullWindowFocus(win, Desktop::eFocusReason::FOCUS_REASON_KEYBIND);
+    }
+    damage();
 }

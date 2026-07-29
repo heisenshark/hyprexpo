@@ -83,7 +83,11 @@ class CScrollOverview : public IOverview {
     Vector2D                         lastMousePosLocal = Vector2D{};
 
     PHLWINDOWREF                     closeOnWindow;
+    PHLWINDOWREF                     mouseHoveredWindow;
     std::optional<double>            preferredKbCenterX;
+
+    PHLWINDOW                        getWindowAtPoint(const Vector2D& pointLocal);
+    void                             updateMouseHover();
 
     std::vector<SP<SWorkspaceImage>> images;
     SP<SWorkspaceImage>              imageForWorkspace(PHLWORKSPACE w);
