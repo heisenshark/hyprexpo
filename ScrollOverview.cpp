@@ -102,6 +102,7 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
     auto onCursorMove = [this](Event::SCallbackInfo& info) {
         if (closing)
             return;
+        info.cancelled = true;
         Vector2D currentMousePos = g_pInputManager->getMouseCoordsInternal() - pMonitor->m_position;
         Vector2D delta = currentMousePos - lastMousePosLocal;
         if (delta.x * delta.x + delta.y * delta.y < 1.0)
@@ -113,6 +114,7 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
     auto onCursorSelect = [this](Event::SCallbackInfo& info) {
         if (closing)
             return;
+        info.cancelled = true;
         selectHoveredWorkspace();
         close();
     };
@@ -120,6 +122,8 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
     auto onMouseAxis = [this](const IPointer::SAxisEvent& e, Event::SCallbackInfo& info) {
         if (closing)
             return;
+
+        info.cancelled = true;
 
         static auto* const* PZOOM = (Hyprlang::INT* const*)CompatHyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:scrolling:scroll_moves_up_down")->getDataStaticPtr();
 
