@@ -142,18 +142,18 @@ CScrollOverview::CScrollOverview(PHLWORKSPACE startedOn_, bool swipe_) : started
     viewportCurrentWorkspace = activeIdx;
 
     const auto focused = Desktop::focusState()->window();
-    if (focused && Desktop::View::validMapped(focused) && focused->m_workspace == startedOn) {
+    if (focused && Desktop::View::validMapped(focused) && !focused->m_isFloating && focused->m_workspace == startedOn) {
         closeOnWindow = focused;
     } else if (viewportCurrentWorkspace < images.size()) {
         for (const auto& img : images[viewportCurrentWorkspace]->windowImages) {
-            if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock())) {
+            if (img->pWindow && Desktop::View::validMapped(img->pWindow.lock()) && !img->pWindow->m_isFloating) {
                 closeOnWindow = img->pWindow;
                 break;
             }
         }
     }
 
-    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock()) && !closeOnWindow->m_isFloating) {
         PHLWINDOW win = closeOnWindow.lock();
         preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
         if (viewportCurrentWorkspace < images.size())
@@ -184,7 +184,7 @@ void CScrollOverview::selectHoveredWorkspace() {
         Vector2D wsOffset = Vector2D{-wsXOff * scale->value(), yoff - viewOffset->value().y * scale->value()};
 
         for (const auto& img : wimg->windowImages) {
-            if (!img->pWindow)
+            if (!img->pWindow || !Desktop::View::validMapped(img->pWindow.lock()) || img->pWindow->m_isFloating)
                 continue;
             CBox texbox = {img->pWindow->m_realPosition->value() - pMonitor->m_position, img->pWindow->m_realSize->value()};
             texbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
@@ -218,7 +218,7 @@ void CScrollOverview::selectHoveredWorkspace() {
         }
     }
 
-    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock())) {
+    if (closeOnWindow && Desktop::View::validMapped(closeOnWindow.lock()) && !closeOnWindow->m_isFloating) {
         PHLWINDOW win = closeOnWindow.lock();
         preferredKbCenterX = CBox{win->m_realPosition->value() - pMonitor->m_position, win->m_realSize->value()}.middle().x;
         if (viewportCurrentWorkspace < images.size())
@@ -565,11 +565,6 @@ void CScrollOverview::fullRender() {
                 Render::GL::g_pHyprOpenGL->renderRect(texbox2, CHyprColor{0.5, 0.0, 0.0, 0.5}, Render::GL::CHyprOpenGLImpl::SRectRenderData{.round = 5});
             }
         }
-        CBox floatbox = CBox{pMonitor->m_position + Vector2D{0.F, yoff / scale->value()}, pMonitor->m_size};
-        floatbox.translate(-VIEWPORT_CENTER).scale(scale->value()).translate(VIEWPORT_CENTER).translate(wsOffset);
-        floatbox.scale(pMonitor->m_scale).round();
-        Render::GL::g_pHyprOpenGL->renderTextureInternal(floatingFb->getTexture(), floatbox, Render::GL::CHyprOpenGLImpl::STextureRenderData{.damage = &damage, .a = 1.0f});
-
         yoff += pMonitor->m_size.y * scale->value();
 
         if (dirty)
