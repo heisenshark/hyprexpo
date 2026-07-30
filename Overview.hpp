@@ -82,7 +82,6 @@ class COverview : public IOverview {
     void       redrawID(int id, bool forcelowres = false);
     void       redrawAll(bool forcelowres = false);
     void       onWorkspaceChange();
-    void       fullRender();
     Hyprexpo::SGridShape currentGridShape() const;
     double     currentOuterInset() const;
     Hyprexpo::STileLayout tileLayoutForIndex(int id, const Vector2D& totalSize, double gap, double outerInset = 0.0, bool centerPartialRows = true) const;
