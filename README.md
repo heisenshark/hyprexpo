@@ -127,6 +127,7 @@ plugin {
         cancel_key = escape
         show_cursor = 1
         show_pinned_windows = 0
+        drag_drop_enable = 0 # Disable moving windows by dragging workspace previews.
     }
 }
 ```
@@ -145,6 +146,7 @@ hl.config({
             gesture_distance = 200,
             cancel_key = "escape",
             show_cursor = 1,
+            drag_drop_enable = 0, -- Disable moving windows by dragging workspace previews.
         },
     },
 })
@@ -173,6 +175,7 @@ hl.config({
 })
 ```
 
+`drag_drop_enable` defaults to `1`. Set it to `0` to keep workspace clicks from moving windows when the pointer shifts during a click.
 
 Add a dispatcher binding:
 
@@ -233,6 +236,26 @@ hl.define_submap("hyprexpo", function()
     hl.bind("escape", function() hl.plugin.hyprexpo.expo("cancel") end)
 end)
 ```
+
+## Active workspace grid
+
+For a more dynamic workspace grid with labels and wallpaper background:
+
+```
+plugin {
+    hyprexpo {
+        dynamic_grid = 1
+        fill_gaps = 0
+        mru_sort = 0
+        show_workspace_names = 1
+        label_pos = top_right
+        label_size = 48
+        wallpaper_bg = 1
+    }
+}
+```
+
+For more options, see the [configuration options](https://hyprexpo.lol/docs/configuration/options/).
 
 ## Next Steps
 
